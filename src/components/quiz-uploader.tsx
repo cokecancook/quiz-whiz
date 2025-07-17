@@ -212,7 +212,7 @@ export default function QuizUploader({ storedQuizzes, onSaveQuizzes, onStartQuiz
                 <div className="space-y-2 pt-4">
                     <Label>Available Quizzes</Label>
                     {storedQuizzes.length > 0 ? (
-                        <div className="border rounded-2xl max-h-80 overflow-y-auto">
+                        <div className="border rounded-2xl">
                         {storedQuizzes.map((quiz) => (
                             <div
                                 key={quiz.id}
