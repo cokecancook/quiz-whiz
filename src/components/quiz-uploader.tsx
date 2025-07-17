@@ -24,6 +24,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { deleteQuiz } from "@/lib/storage";
 
 
 interface QuizUploaderProps {
@@ -109,8 +110,6 @@ export default function QuizUploader({ storedQuizzes, onSaveQuizzes, onStartQuiz
         setError(`Error parsing JSON: ${err.message}`);
         toast({ variant: "destructive", title: "Upload Failed", description: `Error parsing JSON: ${err.message}` });
       } finally {
-        // Reset the file input by changing its key, which forces a re-render.
-        // This is a reliable way to ensure the onChange event fires again on mobile.
         setFileInputKey(Date.now());
       }
     };
@@ -118,8 +117,10 @@ export default function QuizUploader({ storedQuizzes, onSaveQuizzes, onStartQuiz
   };
   
   const handleDeleteQuiz = (idToDelete: string) => {
+    deleteQuiz(idToDelete);
     const updatedQuizzes = storedQuizzes.filter(q => q.id !== idToDelete);
     onSaveQuizzes(updatedQuizzes);
+    
     if (selectedQuizId === idToDelete) {
       setSelectedQuizId(null);
       setIsSheetOpen(false);
@@ -156,45 +157,23 @@ export default function QuizUploader({ storedQuizzes, onSaveQuizzes, onStartQuiz
   const maxQuestions = selectedQuiz?.questions.length ?? 0;
   
   const formatDate = (dateString: string) => {
-    // Check if the dateString is in ISO format (includes 'T' and 'Z')
-    const isISO = dateString.includes('T') && dateString.includes('Z');
-    let date;
-    
-    if (isISO) {
-        date = new Date(dateString);
-    } else {
-        // Attempt to parse locale-specific date strings (e.g., "7/16/2024" or "16/7/2024")
-        // This is less reliable but provides backward compatibility
-        const parts = dateString.split(/[/.-]/);
-        if (parts.length === 3) {
-            // Assuming MM/DD/YYYY for US-like, but this is ambiguous.
-            // Let's try to be smart, but it's not guaranteed.
-            const part1 = parseInt(parts[0]);
-            const part2 = parseInt(parts[1]);
-            const part3 = parseInt(parts[2]);
-            if (part2 > 12) { // Likely DD/MM/YYYY
-                date = new Date(part3, part1 - 1, part2);
-            } else { // Could be MM/DD/YYYY or DD/MM/YYYY where month <= 12
-                date = new Date(part3, part1 - 1, part2);
-            }
-        } else {
-             date = new Date(dateString);
+    if (!dateString) return '';
+    try {
+        const date = new Date(dateString);
+        if (isNaN(date.getTime())) {
+            return `(Invalid Date)`;
         }
+        const day = date.getDate().toString().padStart(2, '0');
+        const month = (date.getMonth() + 1).toString().padStart(2, '0');
+        const year = date.getFullYear().toString().slice(-2);
+        return `(${day}/${month}/${year})`;
+    } catch (e) {
+        return `(${dateString})`
     }
-
-    if (isNaN(date.getTime())) {
-      // If parsing fails, return original string or a fallback
-      return `(${dateString})`;
-    }
-
-    const day = date.getDate().toString().padStart(2, '0');
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const year = date.getFullYear().toString().slice(-2);
-    return `(${day}/${month}/${year})`;
   }
 
   return (
-    <div className="space-y-8 animate-fade-in">
+    <div className="space-y-8 animate-fade-in w-full max-w-5xl mx-auto mt-8">
         <header className="text-center px-6 py-4">
             <h1 className="text-5xl font-headline font-bold text-primary">QuizWhiz</h1>
             <p className="text-muted-foreground mt-2 max-w-md mx-auto">Upload a JSON file to start your personalized quiz experience.</p>
@@ -325,7 +304,7 @@ export default function QuizUploader({ storedQuizzes, onSaveQuizzes, onStartQuiz
                 setSelectedQuizId(null);
             }
         }}>
-            <SheetContent side="bottom" className="rounded-t-lg">
+            <SheetContent side="bottom" className="rounded-t-3xl shadow-sm">
                 <SheetHeader className="text-left">
                     <SheetTitle>Select Preferences</SheetTitle>
                     <SheetDescription>Select how you want to take the '{selectedQuiz?.name}' quiz.</SheetDescription>
