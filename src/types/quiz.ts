@@ -28,5 +28,16 @@ export interface StoredQuiz {
   name: string;
   questions: Question[];
   date: string;
-  history?: QuizAttempt[];
+}
+
+export interface QuestionStats {
+  correct: number;
+  total: number;
+}
+
+export interface QuizProgress {
+  history: QuizAttempt[];
+  questionStats: {
+    [questionText: string]: QuestionStats;
+  };
 }

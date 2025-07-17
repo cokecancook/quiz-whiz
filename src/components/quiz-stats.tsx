@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import type { StoredQuiz } from "@/types/quiz";
+import type { QuizProgress } from "@/types/quiz";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
@@ -12,16 +12,17 @@ import { subDays, format, startOfDay } from 'date-fns';
 type TimeRange = '7days' | '30days' | 'all';
 
 interface QuizStatsProps {
-  quiz: StoredQuiz;
+  quizName: string;
+  progress: QuizProgress | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export default function QuizStats({ quiz, open, onOpenChange }: QuizStatsProps) {
+export default function QuizStats({ quizName, progress, open, onOpenChange }: QuizStatsProps) {
   const [timeRange, setTimeRange] = useState<TimeRange>('7days');
 
   const chartData = useMemo(() => {
-    if (!quiz.history || quiz.history.length === 0) return [];
+    if (!progress || !progress.history || progress.history.length === 0) return [];
 
     const now = new Date();
     let startDate: Date;
@@ -32,7 +33,7 @@ export default function QuizStats({ quiz, open, onOpenChange }: QuizStatsProps) 
       startDate = subDays(now, 29);
     } else {
       // Find the earliest date in history
-      const earliestDate = quiz.history.reduce((earliest, attempt) => {
+      const earliestDate = progress.history.reduce((earliest, attempt) => {
         const attemptDate = new Date(attempt.date);
         return attemptDate < earliest ? attemptDate : earliest;
       }, new Date());
@@ -41,7 +42,7 @@ export default function QuizStats({ quiz, open, onOpenChange }: QuizStatsProps) 
 
     const startOfDayStartDate = startOfDay(startDate);
 
-    const filteredHistory = quiz.history.filter(attempt => new Date(attempt.date) >= startOfDayStartDate);
+    const filteredHistory = progress.history.filter(attempt => new Date(attempt.date) >= startOfDayStartDate);
     
     const aggregatedData: { [key: string]: { questions: number, correct: number, count: number } } = {};
 
@@ -63,7 +64,7 @@ export default function QuizStats({ quiz, open, onOpenChange }: QuizStatsProps) 
 
     return finalData;
 
-  }, [quiz.history, timeRange]);
+  }, [progress, timeRange]);
 
   const chartConfig = {
     questions: {
@@ -80,7 +81,7 @@ export default function QuizStats({ quiz, open, onOpenChange }: QuizStatsProps) 
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" className="h-[90vh] flex flex-col rounded-t-3xl shadow-sm">
         <SheetHeader className="p-8 pb-4">
-          <SheetTitle>Statistics for: {quiz.name}</SheetTitle>
+          <SheetTitle>Statistics for: {quizName}</SheetTitle>
           <SheetDescription>
             View your performance over time.
           </SheetDescription>

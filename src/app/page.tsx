@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import type { StoredQuiz, Question, QuizMode, QuizAttempt } from "@/types/quiz";
+import type { StoredQuiz, Question, QuizMode, QuizAttempt, QuizProgress } from "@/types/quiz";
 import { shuffleArray } from "@/lib/utils";
 import QuizUploader from "@/components/quiz-uploader";
 import QuizQuestion from "@/components/quiz-question";
@@ -11,7 +11,7 @@ import QuizReview from "@/components/quiz-review";
 import QuizTimer from "@/components/quiz-timer";
 import { Button } from "@/components/ui/button";
 import QuizPauseControl from "@/components/quiz-pause-control";
-import { loadQuizzes, saveQuizzes } from "@/lib/storage";
+import { loadQuizzes, saveQuizzes, loadQuizProgress, saveQuizProgress } from "@/lib/storage";
 
 type QuizStatus = "idle" | "active" | "finished" | "review";
 
@@ -28,9 +28,16 @@ export default function Home() {
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
   const [isPaused, setIsPaused] = useState(false);
   const [wasPausedByButton, setWasPausedByButton] = useState(false);
+  const [quizProgressMap, setQuizProgressMap] = useState<Record<string, QuizProgress>>({});
 
   useEffect(() => {
-    setQuizzes(loadQuizzes());
+    const loadedQuizzes = loadQuizzes();
+    setQuizzes(loadedQuizzes);
+    const progressData: Record<string, QuizProgress> = {};
+    for (const quiz of loadedQuizzes) {
+        progressData[quiz.id] = loadQuizProgress(quiz.id);
+    }
+    setQuizProgressMap(progressData);
   }, []);
 
   useEffect(() => {
@@ -54,13 +61,25 @@ export default function Home() {
   };
 
   const handleStartQuiz = (quiz: StoredQuiz, mode: QuizMode, length: number) => {
-    let questionsForQuiz: Question[] = [];
+    let questionsForQuiz: Question[] = [...quiz.questions];
 
     if (mode.type === 'study') {
-      questionsForQuiz = quiz.questions.slice(0, length);
+        const progress = quizProgressMap[quiz.id] || { questionStats: {}, history: [] };
+        // Sort questions by worst performance (lowest correct percentage)
+        questionsForQuiz.sort((a, b) => {
+            const statsA = progress.questionStats[a.question] || { correct: 0, total: 0 };
+            const statsB = progress.questionStats[b.question] || { correct: 0, total: 0 };
+            const perfA = statsA.total > 0 ? statsA.correct / statsA.total : 1;
+            const perfB = statsB.total > 0 ? statsB.correct / statsB.total : 1;
+            if (perfA !== perfB) {
+                return perfA - perfB; // Lower performance first
+            }
+             // If performance is equal, add some randomness
+            return Math.random() - 0.5;
+        });
+        questionsForQuiz = questionsForQuiz.slice(0, length);
     } else {
-      const shuffled = shuffleArray(quiz.questions);
-      questionsForQuiz = shuffled.slice(0, length);
+        questionsForQuiz = shuffleArray(questionsForQuiz).slice(0, length);
     }
 
     const questionsWithShuffledOptions = questionsForQuiz.map(q => ({
@@ -85,63 +104,57 @@ export default function Home() {
       setTimeRemaining(testTime);
     }
   };
+  
+  const updateProgress = (quizId: string, questionText: string, isCorrect: boolean) => {
+    setQuizProgressMap(prevMap => {
+        const currentProgress = prevMap[quizId] ? { ...prevMap[quizId] } : { questionStats: {}, history: [] };
+        
+        // Ensure questionStats exists
+        currentProgress.questionStats = currentProgress.questionStats ? { ...currentProgress.questionStats } : {};
 
-  const updateQuestionOrder = (quizName: string, questionText: string, isCorrect: boolean, mode: 'practice' | 'test' | 'study') => {
-    setQuizzes(prevQuizzes => {
-      const updatedQuizzes = [...prevQuizzes];
-      const quizIndex = updatedQuizzes.findIndex(q => q.name === quizName);
-      if (quizIndex === -1) return prevQuizzes;
-    
-      const quiz = { ...updatedQuizzes[quizIndex] };
-      quiz.questions = [...quiz.questions];
-      const questionIndex = quiz.questions.findIndex(q => q.question === questionText);
-      if (questionIndex === -1) return prevQuizzes;
-    
-      const [questionToMove] = quiz.questions.splice(questionIndex, 1);
-    
-      if (isCorrect) {
-        // Move to the end
-        quiz.questions.push(questionToMove);
-      } else {
-        if (mode === 'study') {
-          // Move 10 positions down, or to the end if not possible
-          const newPosition = Math.min(questionIndex + 10, quiz.questions.length);
-          quiz.questions.splice(newPosition, 0, questionToMove);
-        } else { // practice or test
-          // Move to the top
-          quiz.questions.unshift(questionToMove);
+        const stat = currentProgress.questionStats[questionText] ? { ...currentProgress.questionStats[questionText] } : { correct: 0, total: 0 };
+
+        stat.total += 1;
+        if (isCorrect) {
+            stat.correct += 1;
         }
-      }
-      updatedQuizzes[quizIndex] = quiz;
-      handleQuizzesUpdate(updatedQuizzes);
-      return updatedQuizzes;
+
+        currentProgress.questionStats[questionText] = stat;
+        
+        // For practice/study mode, add a single-question attempt to history
+        if (quizConfig?.mode === 'practice' || quizConfig?.mode === 'study') {
+            const newAttempt: QuizAttempt = {
+                date: new Date().toISOString(),
+                questionsAnswered: 1,
+                correctAnswers: isCorrect ? 1 : 0,
+            };
+            currentProgress.history = [...(currentProgress.history || []), newAttempt];
+        }
+
+        saveQuizProgress(quizId, currentProgress);
+
+        return {
+            ...prevMap,
+            [quizId]: currentProgress
+        };
     });
   };
-  
+
   const handleFinishQuiz = useCallback(() => {
     if (!quizConfig) return;
     
     let finalScore = 0;
-    let correctAnswersCount = 0;
-
+    
     userAnswers.forEach((answer, index) => {
-      const question = activeQuestions[index];
-      const isCorrect = answer === question.correct_answer;
-      if (isCorrect) {
-        correctAnswersCount++;
-      }
-      
-      // For test mode, update all question orders at the end
-      if (quizConfig.mode === 'test') {
-        updateQuestionOrder(quizConfig.name, question.question, isCorrect, 'test');
-      }
+        if (answer === activeQuestions[index].correct_answer) {
+            finalScore++;
+        }
+        if (quizConfig.mode === 'test') {
+            const question = activeQuestions[index];
+            const isCorrect = answer === question.correct_answer;
+            updateProgress(quizConfig.id, question.question, isCorrect);
+        }
     });
-
-    if (quizConfig.mode === 'test') {
-      finalScore = correctAnswersCount;
-    } else {
-      finalScore = score;
-    }
     
     setScore(finalScore);
     setQuizStatus("finished");
@@ -149,22 +162,22 @@ export default function Home() {
 
     // Save quiz attempt to history for 'test' mode
     if (quizConfig.mode === 'test') {
-        const currentQuizzes = loadQuizzes();
-        const quizIndex = currentQuizzes.findIndex(q => q.id === quizConfig.id);
-        if (quizIndex !== -1) {
-          const newAttempt: QuizAttempt = {
+        const newAttempt: QuizAttempt = {
             date: new Date().toISOString(),
             questionsAnswered: activeQuestions.length,
             correctAnswers: finalScore,
-          };
-          if (!currentQuizzes[quizIndex].history) {
-            currentQuizzes[quizIndex].history = [];
-          }
-          currentQuizzes[quizIndex].history!.push(newAttempt);
-          handleQuizzesUpdate(currentQuizzes);
-        }
+        };
+        setQuizProgressMap(prevMap => {
+            const currentProgress = prevMap[quizConfig.id] ? { ...prevMap[quizConfig.id] } : { questionStats: {}, history: [] };
+            currentProgress.history = [...(currentProgress.history || []), newAttempt];
+            saveQuizProgress(quizConfig.id, currentProgress);
+            return {
+                ...prevMap,
+                [quizConfig.id]: currentProgress
+            };
+        });
     }
-  }, [userAnswers, activeQuestions, quizConfig, score]);
+  }, [userAnswers, activeQuestions, quizConfig]);
 
   useEffect(() => {
     if (quizStatus !== 'active' || quizConfig?.mode !== 'test' || timeRemaining === null || isPaused) {
@@ -190,24 +203,6 @@ export default function Home() {
     const newAnswers = [...userAnswers];
     newAnswers[currentQuestionIndex] = answer;
     setUserAnswers(newAnswers);
-
-    if (quizConfig?.mode === 'test') {
-      const currentQuestion = activeQuestions[currentQuestionIndex];
-      const isCorrect = answer === currentQuestion.correct_answer;
-      if (isCorrect) {
-        setScore(s => s + 1);
-      } else {
-        // If the user changes their mind to an incorrect answer, we need to handle that
-        // A simple way is to recalculate score on every answer change in test mode
-        let currentScore = 0;
-        newAnswers.forEach((ans, index) => {
-            if(ans && ans === activeQuestions[index].correct_answer) {
-                currentScore++;
-            }
-        });
-        setScore(currentScore);
-      }
-    }
   };
 
   const handleSubmitPractice = () => {
@@ -220,25 +215,7 @@ export default function Home() {
     }
 
     if (quizConfig.mode === 'practice' || quizConfig.mode === 'study') {
-      updateQuestionOrder(quizConfig.name, currentQuestion.question, isCorrect, quizConfig.mode);
-
-      // Save history for each answered question in practice/study mode
-      const currentQuizzes = loadQuizzes();
-      const quizIndex = currentQuizzes.findIndex(q => q.id === quizConfig.id);
-      if (quizIndex !== -1) {
-        const quizToUpdate = { ...currentQuizzes[quizIndex] };
-        const newAttempt: QuizAttempt = {
-          date: new Date().toISOString(),
-          questionsAnswered: 1,
-          correctAnswers: isCorrect ? 1 : 0,
-        };
-        if (!quizToUpdate.history) {
-          quizToUpdate.history = [];
-        }
-        quizToUpdate.history.push(newAttempt);
-        currentQuizzes[quizIndex] = quizToUpdate;
-        handleQuizzesUpdate(currentQuizzes);
-      }
+        updateProgress(quizConfig.id, currentQuestion.question, isCorrect);
     }
 
     setShowExplanation(true);
@@ -304,7 +281,7 @@ export default function Home() {
       case "active":
         if (activeQuestions.length > 0 && quizConfig) {
           return (
-            <div className="w-full max-w-4xl mx-auto mt-8 p-4 sm:p-6 md:p-8 bg-card rounded-3xl shadow-lg">
+            <div className="w-full max-w-4xl mx-auto mt-8 p-4 sm:p-6 md:p-8 bg-card rounded-3xl shadow-sm">
               <QuizQuestion
                 question={activeQuestions[currentQuestionIndex]}
                 currentQuestion={currentQuestionIndex + 1}
@@ -324,7 +301,7 @@ export default function Home() {
           );
         }
         return (
-          <div className="text-center p-8 bg-card rounded-3xl shadow-lg">
+          <div className="text-center p-8 bg-card rounded-3xl shadow-sm">
             <h2 className="text-2xl font-bold mb-4">No Questions Available!</h2>
             <p className="text-muted-foreground">There are no questions in this quiz.</p>
             <Button onClick={handleRestart} className="mt-6">Back to Home</Button>
@@ -333,7 +310,7 @@ export default function Home() {
       case "finished":
         if (quizConfig) {
           return (
-            <div className="w-full max-w-4xl mx-auto mt-8 p-4 sm:p-6 md:p-8 bg-card rounded-3xl shadow-lg">
+            <div className="w-full max-w-4xl mx-auto mt-8 p-4 sm:p-6 md:p-8 bg-card rounded-3xl shadow-sm">
               <QuizResults
                 score={score}
                 totalQuestions={activeQuestions.length}
@@ -347,7 +324,7 @@ export default function Home() {
         return null;
       case "review":
         return (
-          <div className="w-full max-w-4xl mx-auto mt-8 p-4 sm:p-6 md:p-8 bg-card rounded-3xl shadow-lg">
+          <div className="w-full max-w-4xl mx-auto mt-8 p-4 sm:p-6 md:p-8 bg-card rounded-3xl shadow-sm">
             <QuizReview
                 questions={activeQuestions}
                 userAnswers={userAnswers}
@@ -360,7 +337,8 @@ export default function Home() {
         return (
           <QuizUploader
             storedQuizzes={quizzes}
-            onQuizzesUpdate={setQuizzes}
+            quizProgressMap={quizProgressMap}
+            onQuizzesUpdate={handleQuizzesUpdate}
             onStartQuiz={handleStartQuiz}
           />
         );

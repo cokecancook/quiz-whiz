@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import type { StoredQuiz, QuizMode, QuizData } from "@/types/quiz";
+import type { StoredQuiz, QuizMode, QuizData, QuizProgress } from "@/types/quiz";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,11 +24,12 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { deleteQuiz, saveQuizzes } from "@/lib/storage";
+import { deleteQuiz, deleteQuizProgress, saveQuizzes } from "@/lib/storage";
 
 
 interface QuizUploaderProps {
   storedQuizzes: StoredQuiz[];
+  quizProgressMap: Record<string, QuizProgress>;
   onQuizzesUpdate: (quizzes: StoredQuiz[]) => void;
   onStartQuiz: (quiz: StoredQuiz, mode: QuizMode, length: number) => void;
 }
@@ -44,7 +45,7 @@ const quizLengths = [
     { name: 'Full', value: 50 }
 ];
 
-export default function QuizUploader({ storedQuizzes, onQuizzesUpdate, onStartQuiz }: QuizUploaderProps) {
+export default function QuizUploader({ storedQuizzes, quizProgressMap, onQuizzesUpdate, onStartQuiz }: QuizUploaderProps) {
   const [selectedQuizId, setSelectedQuizId] = useState<string | null>(null);
   const [quizForStats, setQuizForStats] = useState<StoredQuiz | null>(null);
   const [quizForQuestions, setQuizForQuestions] = useState<StoredQuiz | null>(null);
@@ -98,8 +99,7 @@ export default function QuizUploader({ storedQuizzes, onQuizzesUpdate, onStartQu
           id: Date.now().toString(),
           name: file.name.replace('.json', ''),
           questions: json.questions,
-          date: new Date().toISOString(),
-          history: []
+          date: new Date().toISOString()
         };
 
         const updatedQuizzes = [...storedQuizzes, newQuiz];
@@ -119,6 +119,7 @@ export default function QuizUploader({ storedQuizzes, onQuizzesUpdate, onStartQu
   
   const handleDeleteQuiz = (idToDelete: string) => {
     deleteQuiz(idToDelete);
+    deleteQuizProgress(idToDelete);
     const updatedQuizzes = storedQuizzes.filter(q => q.id !== idToDelete);
     onQuizzesUpdate(updatedQuizzes);
     
@@ -126,7 +127,7 @@ export default function QuizUploader({ storedQuizzes, onQuizzesUpdate, onStartQu
       setSelectedQuizId(null);
       setIsSheetOpen(false);
     }
-    toast({ title: "Quiz Deleted", description: "The selected quiz has been removed." });
+    toast({ title: "Quiz Deleted", description: "The selected quiz and its progress have been removed." });
   };
   
   const handleStart = () => {
@@ -235,7 +236,7 @@ export default function QuizUploader({ storedQuizzes, onQuizzesUpdate, onStartQu
                                           <AlertDialogHeader>
                                             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
                                             <AlertDialogDescription>
-                                              This action cannot be undone. This will permanently delete the quiz "{quiz.name}".
+                                                This action cannot be undone. This will permanently delete the quiz "{quiz.name}" and all its associated progress.
                                             </AlertDialogDescription>
                                           </AlertDialogHeader>
                                           <AlertDialogFooter>
@@ -263,7 +264,7 @@ export default function QuizUploader({ storedQuizzes, onQuizzesUpdate, onStartQu
                                         <AlertDialogHeader>
                                         <AlertDialogTitle>Are you sure?</AlertDialogTitle>
                                         <AlertDialogDescription>
-                                            This action cannot be undone. This will permanently delete the quiz "{quiz.name}".
+                                          This action cannot be undone. This will permanently delete the quiz "{quiz.name}" and all its associated progress.
                                         </AlertDialogDescription>
                                         </AlertDialogHeader>
                                         <AlertDialogFooter>
@@ -285,7 +286,8 @@ export default function QuizUploader({ storedQuizzes, onQuizzesUpdate, onStartQu
 
         {quizForStats && (
             <QuizStats
-                quiz={quizForStats}
+                quizName={quizForStats.name}
+                progress={quizProgressMap[quizForStats.id] ?? null}
                 open={!!quizForStats}
                 onOpenChange={() => setQuizForStats(null)}
             />
