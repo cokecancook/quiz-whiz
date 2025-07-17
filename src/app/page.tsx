@@ -11,6 +11,7 @@ import QuizReview from "@/components/quiz-review";
 import QuizTimer from "@/components/quiz-timer";
 import { Button } from "@/components/ui/button";
 import QuizPauseControl from "@/components/quiz-pause-control";
+import { loadQuizzes, saveQuizzes } from "@/lib/storage";
 
 type QuizStatus = "idle" | "active" | "finished" | "review";
 
@@ -29,14 +30,7 @@ export default function Home() {
   const [wasPausedByButton, setWasPausedByButton] = useState(false);
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem("storedQuizzes");
-      if (stored) {
-        setQuizzes(JSON.parse(stored));
-      }
-    } catch (error) {
-      console.error("Failed to load quizzes from localStorage", error);
-    }
+    setQuizzes(loadQuizzes());
   }, []);
 
   useEffect(() => {
@@ -55,12 +49,8 @@ export default function Home() {
 
 
   const handleSaveQuizzes = (updatedQuizzes: StoredQuiz[]) => {
-    try {
-      localStorage.setItem("storedQuizzes", JSON.stringify(updatedQuizzes));
-      setQuizzes(updatedQuizzes);
-    } catch (error) {
-      console.error("Failed to save quizzes to localStorage", error);
-    }
+    saveQuizzes(updatedQuizzes);
+    setQuizzes(updatedQuizzes);
   };
 
   const handleStartQuiz = (quiz: StoredQuiz, mode: QuizMode, length: number) => {
@@ -159,22 +149,22 @@ export default function Home() {
 
     // Save quiz attempt to history for 'test' mode
     if (quizConfig.mode === 'test') {
-        const updatedQuizzes = [...quizzes];
-        const quizIndex = updatedQuizzes.findIndex(q => q.id === quizConfig.id);
+        const currentQuizzes = loadQuizzes();
+        const quizIndex = currentQuizzes.findIndex(q => q.id === quizConfig.id);
         if (quizIndex !== -1) {
           const newAttempt: QuizAttempt = {
             date: new Date().toISOString(),
             questionsAnswered: activeQuestions.length,
             correctAnswers: finalScore,
           };
-          if (!updatedQuizzes[quizIndex].history) {
-            updatedQuizzes[quizIndex].history = [];
+          if (!currentQuizzes[quizIndex].history) {
+            currentQuizzes[quizIndex].history = [];
           }
-          updatedQuizzes[quizIndex].history!.push(newAttempt);
-          handleSaveQuizzes(updatedQuizzes);
+          currentQuizzes[quizIndex].history!.push(newAttempt);
+          handleSaveQuizzes(currentQuizzes);
         }
     }
-  }, [userAnswers, activeQuestions, quizConfig, score, quizzes]);
+  }, [userAnswers, activeQuestions, quizConfig, score]);
 
   useEffect(() => {
     if (quizStatus !== 'active' || quizConfig?.mode !== 'test' || timeRemaining === null || isPaused) {
@@ -234,25 +224,22 @@ export default function Home() {
       updateQuestionOrder(quizConfig.name, currentQuestion.question, isCorrect, quizConfig.mode);
 
       // Save history for each answered question in practice/study mode
-      setQuizzes(prevQuizzes => {
-        const updatedQuizzes = [...prevQuizzes];
-        const quizIndex = updatedQuizzes.findIndex(q => q.id === quizConfig.id);
-        if (quizIndex !== -1) {
-          const quizToUpdate = { ...updatedQuizzes[quizIndex] };
-          const newAttempt: QuizAttempt = {
-            date: new Date().toISOString(),
-            questionsAnswered: 1,
-            correctAnswers: isCorrect ? 1 : 0,
-          };
-          if (!quizToUpdate.history) {
-            quizToUpdate.history = [];
-          }
-          quizToUpdate.history.push(newAttempt);
-          updatedQuizzes[quizIndex] = quizToUpdate;
-          handleSaveQuizzes(updatedQuizzes);
+      const currentQuizzes = loadQuizzes();
+      const quizIndex = currentQuizzes.findIndex(q => q.id === quizConfig.id);
+      if (quizIndex !== -1) {
+        const quizToUpdate = { ...currentQuizzes[quizIndex] };
+        const newAttempt: QuizAttempt = {
+          date: new Date().toISOString(),
+          questionsAnswered: 1,
+          correctAnswers: isCorrect ? 1 : 0,
+        };
+        if (!quizToUpdate.history) {
+          quizToUpdate.history = [];
         }
-        return updatedQuizzes;
-      });
+        quizToUpdate.history.push(newAttempt);
+        currentQuizzes[quizIndex] = quizToUpdate;
+        handleSaveQuizzes(currentQuizzes);
+      }
     }
 
     setShowExplanation(true);
@@ -318,25 +305,27 @@ export default function Home() {
       case "active":
         if (activeQuestions.length > 0 && quizConfig) {
           return (
-            <QuizQuestion
-              question={activeQuestions[currentQuestionIndex]}
-              currentQuestion={currentQuestionIndex + 1}
-              totalQuestions={activeQuestions.length}
-              score={score}
-              selectedAnswer={selectedAnswer}
-              showExplanation={showExplanation}
-              onAnswerSelect={handleAnswerSelect}
-              onSubmit={handleSubmitPractice}
-              onNext={handleNextQuestion}
-              onPrev={handlePrevQuestion}
-              mode={quizConfig.mode}
-              onSubmitTest={handleFinishQuiz}
-              isPaused={isPaused}
-            />
+            <div className="w-full max-w-4xl mx-auto mt-8 p-4 sm:p-6 md:p-8 bg-card rounded-3xl shadow-lg">
+              <QuizQuestion
+                question={activeQuestions[currentQuestionIndex]}
+                currentQuestion={currentQuestionIndex + 1}
+                totalQuestions={activeQuestions.length}
+                score={score}
+                selectedAnswer={selectedAnswer}
+                showExplanation={showExplanation}
+                onAnswerSelect={handleAnswerSelect}
+                onSubmit={handleSubmitPractice}
+                onNext={handleNextQuestion}
+                onPrev={handlePrevQuestion}
+                mode={quizConfig.mode}
+                onSubmitTest={handleFinishQuiz}
+                isPaused={isPaused}
+              />
+            </div>
           );
         }
         return (
-          <div className="text-center p-8 bg-card rounded-3xl shadow-sm">
+          <div className="text-center p-8 bg-card rounded-3xl shadow-lg">
             <h2 className="text-2xl font-bold mb-4">No Questions Available!</h2>
             <p className="text-muted-foreground">There are no questions in this quiz.</p>
             <Button onClick={handleRestart} className="mt-6">Back to Home</Button>
@@ -345,23 +334,27 @@ export default function Home() {
       case "finished":
         if (quizConfig) {
           return (
-            <QuizResults
-              score={score}
-              totalQuestions={activeQuestions.length}
-              onRestart={handleRestart}
-              onReview={handleReview}
-              mode={quizConfig.mode}
-            />
+            <div className="w-full max-w-4xl mx-auto mt-8 p-4 sm:p-6 md:p-8 bg-card rounded-3xl shadow-lg">
+              <QuizResults
+                score={score}
+                totalQuestions={activeQuestions.length}
+                onRestart={handleRestart}
+                onReview={handleReview}
+                mode={quizConfig.mode}
+              />
+            </div>
           );
         }
         return null;
       case "review":
         return (
+          <div className="w-full max-w-4xl mx-auto mt-8 p-4 sm:p-6 md:p-8 bg-card rounded-3xl shadow-lg">
             <QuizReview
                 questions={activeQuestions}
                 userAnswers={userAnswers}
                 onClose={() => setQuizStatus('finished')}
             />
+           </div>
         );
       case "idle":
       default:
@@ -388,9 +381,11 @@ export default function Home() {
             onCloseQuiz={handleRestart}
         />
       )}
-      <div className="w-full max-w-4xl mx-auto">
+      <div className="w-full max-w-5xl mx-auto">
         {renderContent()}
       </div>
     </main>
   );
 }
+
+    
