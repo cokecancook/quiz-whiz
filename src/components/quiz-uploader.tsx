@@ -51,6 +51,7 @@ export default function QuizUploader({ storedQuizzes, onSaveQuizzes, onStartQuiz
   const [selectedLength, setSelectedLength] = useState<number>(10);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fileInputKey, setFileInputKey] = useState(Date.now());
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
@@ -107,10 +108,13 @@ export default function QuizUploader({ storedQuizzes, onSaveQuizzes, onStartQuiz
       } catch (err: any) {
         setError(`Error parsing JSON: ${err.message}`);
         toast({ variant: "destructive", title: "Upload Failed", description: `Error parsing JSON: ${err.message}` });
+      } finally {
+        // Reset the file input by changing its key, which forces a re-render.
+        // This is a reliable way to ensure the onChange event fires again on mobile.
+        setFileInputKey(Date.now());
       }
     };
     reader.readAsText(file);
-    event.target.value = '';
   };
   
   const handleDeleteQuiz = (idToDelete: string) => {
@@ -206,7 +210,7 @@ export default function QuizUploader({ storedQuizzes, onSaveQuizzes, onStartQuiz
                     <Button onClick={() => fileInputRef.current?.click()} className="w-full rounded-full">
                         <Upload className="mr-2 h-4 w-4" /> Upload Quiz JSON
                     </Button>
-                    <Input type="file" ref={fileInputRef} onChange={handleFileUpload} accept=".json" className="hidden" />
+                    <Input type="file" key={fileInputKey} ref={fileInputRef} onChange={handleFileUpload} accept=".json" className="hidden" />
                 </div>
                 {error && <p className="text-destructive text-sm">{error}</p>}
                 <div className="space-y-2 pt-4">
@@ -262,7 +266,7 @@ export default function QuizUploader({ storedQuizzes, onSaveQuizzes, onStartQuiz
                                       </AlertDialog>
                                     </div>
                                 </div>
-                                <div className="sm:hidden flex flex-col items-center justify-end gap-2 mt-4 w-full">
+                                <div className="flex sm:hidden flex-col gap-2 mt-4 w-full">
                                   <Button variant="outline" className="w-full" size="sm" onClick={(e) => { e.stopPropagation(); handleShowQuestions(quiz); }}>
                                       <List className="h-4 w-4 mr-1" /> View Questions
                                   </Button>
