@@ -24,12 +24,12 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { deleteQuiz } from "@/lib/storage";
+import { deleteQuiz, saveQuizzes } from "@/lib/storage";
 
 
 interface QuizUploaderProps {
   storedQuizzes: StoredQuiz[];
-  onSaveQuizzes: (quizzes: StoredQuiz[]) => void;
+  onQuizzesUpdate: (quizzes: StoredQuiz[]) => void;
   onStartQuiz: (quiz: StoredQuiz, mode: QuizMode, length: number) => void;
 }
 
@@ -44,7 +44,7 @@ const quizLengths = [
     { name: 'Full', value: 50 }
 ];
 
-export default function QuizUploader({ storedQuizzes, onSaveQuizzes, onStartQuiz }: QuizUploaderProps) {
+export default function QuizUploader({ storedQuizzes, onQuizzesUpdate, onStartQuiz }: QuizUploaderProps) {
   const [selectedQuizId, setSelectedQuizId] = useState<string | null>(null);
   const [quizForStats, setQuizForStats] = useState<StoredQuiz | null>(null);
   const [quizForQuestions, setQuizForQuestions] = useState<StoredQuiz | null>(null);
@@ -103,7 +103,8 @@ export default function QuizUploader({ storedQuizzes, onSaveQuizzes, onStartQuiz
         };
 
         const updatedQuizzes = [...storedQuizzes, newQuiz];
-        onSaveQuizzes(updatedQuizzes);
+        saveQuizzes(updatedQuizzes);
+        onQuizzesUpdate(updatedQuizzes);
         setError(null);
         toast({ title: "Quiz Uploaded!", description: `"${newQuiz.name}" has been added.` });
       } catch (err: any) {
@@ -119,7 +120,7 @@ export default function QuizUploader({ storedQuizzes, onSaveQuizzes, onStartQuiz
   const handleDeleteQuiz = (idToDelete: string) => {
     deleteQuiz(idToDelete);
     const updatedQuizzes = storedQuizzes.filter(q => q.id !== idToDelete);
-    onSaveQuizzes(updatedQuizzes);
+    onQuizzesUpdate(updatedQuizzes);
     
     if (selectedQuizId === idToDelete) {
       setSelectedQuizId(null);

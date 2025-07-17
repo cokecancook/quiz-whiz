@@ -48,7 +48,7 @@ export default function Home() {
   }, [quizStatus, quizConfig, wasPausedByButton]);
 
 
-  const handleSaveQuizzes = (updatedQuizzes: StoredQuiz[]) => {
+  const handleQuizzesUpdate = (updatedQuizzes: StoredQuiz[]) => {
     saveQuizzes(updatedQuizzes);
     setQuizzes(updatedQuizzes);
   };
@@ -113,7 +113,7 @@ export default function Home() {
         }
       }
       updatedQuizzes[quizIndex] = quiz;
-      handleSaveQuizzes(updatedQuizzes);
+      handleQuizzesUpdate(updatedQuizzes);
       return updatedQuizzes;
     });
   };
@@ -161,7 +161,7 @@ export default function Home() {
             currentQuizzes[quizIndex].history = [];
           }
           currentQuizzes[quizIndex].history!.push(newAttempt);
-          handleSaveQuizzes(currentQuizzes);
+          handleQuizzesUpdate(currentQuizzes);
         }
     }
   }, [userAnswers, activeQuestions, quizConfig, score]);
@@ -198,7 +198,6 @@ export default function Home() {
         setScore(s => s + 1);
       } else {
         // If the user changes their mind to an incorrect answer, we need to handle that
-        // This logic gets complex if we allow changing answers and track score live
         // A simple way is to recalculate score on every answer change in test mode
         let currentScore = 0;
         newAnswers.forEach((ans, index) => {
@@ -238,7 +237,7 @@ export default function Home() {
         }
         quizToUpdate.history.push(newAttempt);
         currentQuizzes[quizIndex] = quizToUpdate;
-        handleSaveQuizzes(currentQuizzes);
+        handleQuizzesUpdate(currentQuizzes);
       }
     }
 
@@ -361,7 +360,7 @@ export default function Home() {
         return (
           <QuizUploader
             storedQuizzes={quizzes}
-            onSaveQuizzes={handleSaveQuizzes}
+            onQuizzesUpdate={setQuizzes}
             onStartQuiz={handleStartQuiz}
           />
         );
@@ -387,5 +386,3 @@ export default function Home() {
     </main>
   );
 }
-
-    
