@@ -2,6 +2,8 @@
 
 This is a quiz application built with Next.js and Firebase Studio. It allows users to upload their own JSON-based quizzes, practice in different modes, and track their performance over time.
 
+<img width="1359" height="851" alt="screenshot" src="https://github.com/user-attachments/assets/1b2bde37-ee47-4cda-8a9c-36968b70744c" />
+
 ## App Functionalities
 
 QuizWhiz offers the following core features:
